@@ -168,7 +168,7 @@
 ```
 
 #### Вариант Б: Оффлайн-установка через файл архива (Releases)
-1. Скачайте нужный архив со страницы [Releases](https://github.com/testdomaintestdomain/mikrotik-webproxy-login-c/releases):
+1. Скачайте нужный архив со страницы [Releases](https://github.com/testdomaintestdomain/web-proxy-login-mikrotik-c/releases):
    * Для **RouterOS 7.21+**: используйте OCI-образы `proxy-login-{arch}.tar.gz`.
    * Для **RouterOS 7.4 – 7.20**: используйте совместимые классические образы `proxy-login-{arch}-7.20-Docker.tar.gz`.
 2. Загрузите файл на роутер через Winbox (меню **Files**) или SCP.
@@ -269,8 +269,8 @@ RouterOS скачает свежие слои и перезапустит кон
 
 ```bash
 # Клонирование репозитория
-git clone https://github.com/testdomaintestdomain/mikrotik-webproxy-login-c.git
-cd mikrotik-webproxy-login-c
+git clone https://github.com/testdomaintestdomain/web-proxy-login-mikrotik-c.git
+cd web-proxy-login-mikrotik-c
 
 # Сборка всех артефактов и генерация .sha256 сумм
 chmod +x build.sh scripts/mkdockertar-c.sh
