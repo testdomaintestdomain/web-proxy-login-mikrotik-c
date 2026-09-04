@@ -1,0 +1,232 @@
+name: Release and Publish Containers
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.2.0). Leave empty to use latest git tag'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  # ============================================================
+  # ЭТАП 1: Публикация контейнеров в GitHub Container Registry (ghcr.io)
+  # ============================================================
+  publish-ghcr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine Version
+        id: ver
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            V="${{ github.event.inputs.tag }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            V="${GITHUB_REF#refs/tags/}"
+          else
+            V=$(git describe --tags --always 2>/dev/null || echo "v1.2.0")
+          fi
+          echo "version=${V}" >> "$GITHUB_OUTPUT"
+
+      # Метаданные для multi-arch (amd64, arm64, armv7)
+      - name: Extract metadata for standard architectures
+        id: meta-standard
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/proxy-login
+          tags: |
+            type=raw,value=${{ steps.ver.outputs.version }}
+            type=raw,value=latest
+
+      # Сборка и отправка Multi-Arch (provenance и sbom выключены для RouterOS!)
+      - name: Build and push Multi-Arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          provenance: false
+          sbom: false
+          build-args: |
+            VERSION=${{ steps.ver.outputs.version }}
+            BASE=alpine:latest
+          tags: ${{ steps.meta-standard.outputs.tags }}
+          labels: ${{ steps.meta-standard.outputs.labels }}
+
+      # Метаданные для armv5 (hEX refresh E50UG / hEX S E60iUGS)
+      - name: Extract metadata for armv5
+        id: meta-armv5
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/proxy-login
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ steps.ver.outputs.version }}-armv5
+            type=raw,value=latest-armv5
+
+      # Сборка отдельного тега под armv5 (из arm32v5/debian)
+      - name: Build and push armv5 image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm/v5
+          push: true
+          provenance: false
+          sbom: false
+          build-args: |
+            VERSION=${{ steps.ver.outputs.version }}
+            BASE=arm32v5/debian:bookworm-slim
+          tags: ${{ steps.meta-armv5.outputs.tags }}
+          labels: ${{ steps.meta-armv5.outputs.labels }}
+
+  # ============================================================
+  # ЭТАП 2: Сборка файлов, парсинг CHANGELOG.md и публикация релиза
+  # ============================================================
+  release-artifacts:
+    needs: publish-ghcr
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Determine Tag
+        id: vars
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG=$(git describe --tags --always 2>/dev/null || echo "v1.2.0")
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build all artifacts
+        run: |
+          chmod +x build.sh scripts/mkdockertar-c.sh
+          VERSION="${{ steps.vars.outputs.tag }}" ./build.sh
+
+      - name: Generate individual .sha256 checksums
+        run: |
+          cd builds
+          for file in *; do
+            if [ -f "$file" ] && [[ "$file" != *.sha256 ]]; then
+              sha256sum "$file" > "${file}.sha256"
+            fi
+          done
+          ls -la
+
+      - name: Parse CHANGELOG and Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.vars.outputs.tag }}
+        run: |
+          REPO_OWNER="${{ github.repository_owner }}"
+          REPO_URL="https://github.com/${{ github.repository }}"
+          TAG_NO_V="${TAG#v}"
+
+          RELEASE_TITLE="${TAG}"
+          CHANGELOG_BODY=""
+
+          # 1. Извлечение заголовка и описания из CHANGELOG.md
+          if [ -f "CHANGELOG.md" ]; then
+            # Поиск строки вида "## [v1.2.0] — Заголовок", "## [1.2.0] — Заголовок", "## v1.2.0 — Заголовок"
+            TITLE_LINE=$(grep -m1 -E "^##\s*(\[?v?${TAG_NO_V}\]?)" CHANGELOG.md || true)
+            
+            if [ -n "$TITLE_LINE" ]; then
+              # Очищаем заголовок от "## ", "[" и "]" для отображения в сайдбаре
+              RELEASE_TITLE=$(echo "$TITLE_LINE" | sed -E 's/^##\s*//; s/\[//g; s/\]//g')
+              
+              # Вырезаем текст версии между найденным заголовком и следующим "## "
+              CHANGELOG_BODY=$(awk -v tag="$TAG" -v tag_nov="$TAG_NO_V" '
+                $0 ~ "^##[[:space:]]*\\[?(v?" tag_nov "|" tag ")\\]?" { found=1; next }
+                found && /^##[[:space:]]/ { exit }
+                found { print }
+              ' CHANGELOG.md | sed -e :a -e '/^\n*$/{$d;N;};/\n$/ba')
+            fi
+          fi
+
+          # 2. Если запись в CHANGELOG.md отсутствует — fallback на историю Git
+          if [ -z "$(echo "$CHANGELOG_BODY" | tr -d '[:space:]')" ]; then
+            git tag -f "$TAG" HEAD >/dev/null 2>&1 || true
+            PREV_TAG=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+            
+            if [ -n "$PREV_TAG" ]; then
+              COMMIT_RANGE="${PREV_TAG}..${TAG}"
+              CHANGELOG_HEADER="### 📝 Изменения относительно [\`${PREV_TAG}\`](${REPO_URL}/releases/tag/${PREV_TAG}) ([полный diff](${REPO_URL}/compare/${PREV_TAG}...${TAG})):\n\n"
+            else
+              COMMIT_RANGE="${TAG}"
+              CHANGELOG_HEADER="### 📝 Коммиты первого релиза [\`${TAG}\`](${REPO_URL}/tree/${TAG}):\n\n"
+            fi
+
+            COMMITS_LOG=$(git log "$COMMIT_RANGE" --pretty=format:"* [\`%h\`](${REPO_URL}/commit/%H) %s — *@%an*")
+            CHANGELOG_BODY="${CHANGELOG_HEADER}${COMMITS_LOG}"
+          fi
+
+          # 3. Список контрольных сумм для включения в описание
+          CHECKSUMS_TABLE=$(cd builds && sha256sum proxy-login* | grep -v '\.sha256$' || true)
+
+          # 4. Формирование итогового Markdown файла релиза
+          cat << EOF > release_notes.md
+          $(printf "%b" "$CHANGELOG_BODY")
+
+          ### 💾 Файлы для оффлайн-установки (RouterOS 7.4–7.21+)
+
+          | Архитектура | Оборудование MikroTik | RouterOS 7.21+ (OCI) | RouterOS 7.4–7.20 (Classic) |
+          | :--- | :--- | :--- | :--- |
+          | **amd64 / x86** | CHR, x86 PC | \`proxy-login-amd64.tar.gz\` | \`proxy-login-amd64-7.20-Docker.tar.gz\` |
+          | **arm64** | RB5009, CCR2004, hAP ax², hAP ax³, Chateau | \`proxy-login-arm64.tar.gz\` | \`proxy-login-arm64-7.20-Docker.tar.gz\` |
+          | **arm (v7)** | hAP ac², cAP ac, RB3011, RB4011 | \`proxy-login-arm.tar.gz\` | \`proxy-login-arm-7.20-Docker.tar.gz\` |
+          | **armv5** | hEX refresh (E50UG), hEX S (E60iUGS) | \`proxy-login-armv5.tar.gz\` | \`proxy-login-armv5-7.20-Docker.tar.gz\` |
+
+          EOF
+
+          # 5. Публикация релиза на GitHub с извлеченным заголовком
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "$RELEASE_TITLE" \
+              --notes-file release_notes.md
+          else
+            gh release edit "$TAG" \
+              --title "$RELEASE_TITLE" \
+              --notes-file release_notes.md
+          fi
+          
+          gh release upload "$TAG" builds/* --clobber
