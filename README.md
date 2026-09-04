@@ -156,11 +156,11 @@
 
 ```routeros
 # Стандартные архитектуры (amd64, arm64, arm v7):
-/container/add remote-image=ghcr.io/<ВАШ_GITHUB_USERNAME>/proxy-login:latest \
+/container/add remote-image=ghcr.io/testdomaintestdomain/proxy-login:latest \
     name=proxy-login interface=veth-proxy envlist=proxy_envs root-dir=login logging=yes start-on-boot=yes
 
 # Для моделей MikroTik hEX refresh (E50UG) и hEX S 2025 (E60iUGS) на armv5:
-/container/add remote-image=ghcr.io/<ВАШ_GITHUB_USERNAME>/proxy-login:latest-armv5 \
+/container/add remote-image=ghcr.io/testdomaintestdomain/proxy-login:latest-armv5 \
     name=proxy-login interface=veth-proxy envlist=proxy_envs root-dir=login logging=yes start-on-boot=yes
 
 # Запуск
@@ -168,7 +168,7 @@
 ```
 
 #### Вариант Б: Оффлайн-установка через файл архива (Releases)
-1. Скачайте нужный архив со страницы [Releases](https://github.com/<ВАШ_GITHUB_USERNAME>/mikrotik-webproxy-login-c/releases):
+1. Скачайте нужный архив со страницы [Releases](https://github.com/testdomaintestdomain/mikrotik-webproxy-login-c/releases):
    * Для **RouterOS 7.21+**: используйте OCI-образы `proxy-login-{arch}.tar.gz`.
    * Для **RouterOS 7.4 – 7.20**: используйте совместимые классические образы `proxy-login-{arch}-7.20-Docker.tar.gz`.
 2. Загрузите файл на роутер через Winbox (меню **Files**) или SCP.
@@ -269,7 +269,7 @@ RouterOS скачает свежие слои и перезапустит кон
 
 ```bash
 # Клонирование репозитория
-git clone https://github.com/<ВАШ_GITHUB_USERNAME>/mikrotik-webproxy-login-c.git
+git clone https://github.com/testdomaintestdomain/mikrotik-webproxy-login-c.git
 cd mikrotik-webproxy-login-c
 
 # Сборка всех артефактов и генерация .sha256 сумм
