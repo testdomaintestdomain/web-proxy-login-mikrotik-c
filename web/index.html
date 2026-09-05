@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MikroTik WebProxy Auth Generator</title>
+    <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #111827;
+            --bg-card: #162032;
+            --bg-input: #060911;
+            --border-color: #23334d;
+            --border-focus: #38bdf8;
+            --text-primary: #f1f5f9;
+            --text-muted: #94a3b8;
+            --text-accent: #38bdf8;
+            --accent-hover: #0ea5e9;
+            --accent-glow: rgba(56, 189, 248, 0.15);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+            --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: var(--font-sans);
+            line-height: 1.5;
+            padding: 24px 16px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1440px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 24px;
+            position: relative;
+        }
+        header h1 {
+            font-size: 1.85rem;
+            font-weight: 700;
+            color: var(--text-accent);
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        header p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            margin-top: 4px;
+        }
+
+        .badges {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        .badge:hover {
+            border-color: var(--text-accent);
+            color: var(--text-accent);
+        }
+        .badge-secure {
+            border-color: rgba(16, 185, 129, 0.4);
+            color: #6ee7b7;
+            background: rgba(16, 185, 129, 0.08);
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 420px minmax(0, 1fr);
+            gap: 20px;
+            align-items: start;
+        }
+        @media (max-width: 1080px) {
+            .layout { grid-template-columns: 1fr; }
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(22, 32, 50, 0.4);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .card-header h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card-body {
+            padding: 20px;
+        }
+
+        .section-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-accent);
+            margin-bottom: 12px;
+            margin-top: 16px;
+        }
+        .section-title:first-child { margin-top: 0; }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .form-group {
+            margin-bottom: 12px;
+            position: relative;
+        }
+        label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+        .input-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        input, select {
+            width: 100%;
+            padding: 9px 12px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            outline: none;
+            transition: all 0.15s ease;
+        }
+        input:focus, select:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+        .toggle-btn {
+            position: absolute;
+            right: 8px;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .toggle-btn:hover { color: var(--text-primary); }
+
+        .btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 18px;
+        }
+        button.action-btn {
+            cursor: pointer;
+            padding: 10px 14px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            font-weight: 600;
+            font-size: 0.85rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .btn-accent {
+            background: var(--text-accent);
+            border-color: var(--text-accent);
+            color: #030712;
+        }
+        .btn-accent:hover {
+            background: var(--accent-hover);
+            color: #ffffff;
+        }
+        .btn-outline {
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+        .btn-outline:hover {
+            background: #1f2d47;
+            border-color: #3b5072;
+        }
+
+        .callout {
+            background: rgba(16, 185, 129, 0.08);
+            border-left: 3px solid var(--success);
+            padding: 10px 12px;
+            border-radius: 0 6px 6px 0;
+            font-size: 0.78rem;
+            color: #a7f3d0;
+            margin-bottom: 16px;
+            line-height: 1.4;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .tabs::-webkit-scrollbar { display: none; }
+        .tab-btn {
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--text-muted);
+            padding: 14px 18px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .tab-btn:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.02);
+        }
+        .tab-btn.active {
+            color: var(--text-accent);
+            border-bottom-color: var(--text-accent);
+            background: rgba(56, 189, 248, 0.05);
+        }
+
+        .toolbar {
+            padding: 10px 16px;
+            background: rgba(6, 9, 17, 0.6);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .toolbar-info {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+        }
+        .toolbar-actions {
+            display: flex;
+            gap: 8px;
+        }
+        .tool-btn {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .tool-btn:hover {
+            background: #1f2d47;
+            border-color: var(--text-accent);
+        }
+        .tool-btn.success {
+            background: var(--success) !important;
+            color: #ffffff !important;
+            border-color: var(--success) !important;
+        }
+
+        pre.code-view {
+            background: var(--bg-input);
+            padding: 16px;
+            margin: 0;
+            font-family: var(--font-mono);
+            font-size: 0.82rem;
+            line-height: 1.6;
+            color: #d1d5db;
+            overflow-x: auto;
+            max-height: 680px;
+            white-space: pre;
+            tab-size: 2;
+        }
+
+        .c-comment { color: #64748b; font-style: italic; }
+        .c-cmd { color: #38bdf8; font-weight: 600; }
+        .c-kw { color: #f472b6; font-weight: 600; }
+        .c-str { color: #86efac; }
+        .c-var { color: #fde047; }
+        .c-num { color: #fb923c; }
+
+        footer {
+            margin-top: 32px;
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border-color);
+            padding-top: 16px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>⚡ MikroTik WebProxy Auth Generator</h1>
+        <p>Генератор защищенного развертывания прокси с автоадаптацией синтаксиса для RouterOS 7.4 – 7.22+</p>
+        <div class="badges">
+            <span class="badge">⚙️ RouterOS 7.4 – 7.22+</span>
+        </div>
+    </header>
+
+    <div class="layout">
+        <div class="card">
+            <div class="card-header">
+                <h2>🛠️ Параметры окружения</h2>
+            </div>
+            <div class="card-body">
+                <div class="section-title">Сеть и интерфейсы</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="vethName">Имя VETH</label>
+                        <input type="text" id="vethName" value="proxy-login-veth" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="form-group">
+                        <label for="bridgeName">Имя Bridge</label>
+                        <input type="text" id="bridgeName" value="bridge1" autocomplete="off" spellcheck="false">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="ipAddress">IP контейнера</label>
+                        <input type="text" id="ipAddress" value="172.30.1.2/24" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="form-group">
+                        <label for="gateway">Шлюз (IP роутера)</label>
+                        <input type="text" id="gateway" value="172.30.1.1" autocomplete="off" spellcheck="false">
+                    </div>
+                </div>
+
+                <div class="section-title">Порты и изоляция</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="listenPort">Внешний порт (Auth)</label>
+                        <input type="number" id="listenPort" value="4567" min="1" max="65535">
+                    </div>
+                    <div class="form-group">
+                        <label for="upstreamPort">Порт /ip/proxy (Local)</label>
+                        <input type="number" id="upstreamPort" value="8080" min="1" max="65535">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="wanMode">Внешний интерфейс (WAN)</label>
+                    <select id="wanMode">
+                        <option value="auto" selected>Auto (DHCP-Client → WAN List → PPPoE → Route)</option>
+                        <option value="ether1">ether1</option>
+                        <option value="wan_list">in-interface-list=WAN</option>
+                        <option value="all">Все интерфейсы (без привязки)</option>
+                    </select>
+                </div>
+
+                <div class="section-title">Аутентификация (HTTP Basic)</div>
+                <div class="form-group">
+                    <label for="username">Имя пользователя (PROXY_USER)</label>
+                    <input type="text" id="username" value="ck42msHYpO4qR1rsThGplE7JC6YOttvTa6kUPgkJxHxRuTvian9dL0gxCht62daZ" autocomplete="off" spellcheck="false">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Пароль (PROXY_PASS)</label>
+                    <div class="input-wrap">
+                        <input type="password" id="password" value="9DvuRcmdNdrD2H5AP1F5ybAX14PHCl9SxPU55lJNsfzbuHLrFI3tbDgRcnaKtlWt" autocomplete="off" spellcheck="false">
+                        <button type="button" class="toggle-btn" id="togglePassBtn" title="Показать/скрыть пароль">👁️</button>
+                    </div>
+                </div>
+
+                <div class="section-title">Хранилище и среда исполнения</div>
+                <div class="form-group">
+                    <label for="storage">Хранилище контейнера</label>
+                    <select id="storage">
+                        <option value="auto" selected>Auto (usb1 → flash → disk1)</option>
+                        <option value="flash">flash (Папка flash/ на 16MB SPI Flash)</option>
+                        <option value="disk1">disk1 (Внутренняя память x86/CHR/eMMC)</option>
+                        <option value="usb1">usb1 (USB-накопитель)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="scheduleUpdate">Автообновление контейнера</label>
+                    <select id="scheduleUpdate">
+                        <option value="yes" selected>Включить (ежедневно в 04:30)</option>
+                        <option value="no">Отключить</option>
+                    </select>
+                </div>
+
+                <div class="btn-group">
+                    <button type="button" class="action-btn btn-outline" id="btnRandom">🎲 Случайные данные</button>
+                    <button type="button" class="action-btn btn-accent" id="btnReset">↺ Сброс настроек</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="tabs">
+                <button type="button" class="tab-btn active" data-tab="setup">🚀 Установка (.rsc)</button>
+                <button type="button" class="tab-btn" data-tab="verify">🧪 Проверка & curl</button>
+                <button type="button" class="tab-btn" data-tab="update">🔄 Обновление</button>
+                <button type="button" class="tab-btn" data-tab="uninstall">🗑️ Полное удаление</button>
+            </div>
+
+            <div class="toolbar">
+                <span class="toolbar-info" id="viewInfo">RouterOS Setup Script</span>
+                <div class="toolbar-actions">
+                    <button type="button" class="tool-btn" id="btnDownload">💾 Скачать .rsc</button>
+                    <button type="button" class="tool-btn" id="btnCopy">📋 Копировать код</button>
+                </div>
+            </div>
+
+            <pre class="code-view"><code id="codeOutput"></code></pre>
+        </div>
+    </div>
+
+    <footer>
+        MikroTik WebProxy Auth Shim Engine • Архитектура C11/musl • Отсутствие внешних runtime-зависимостей
+    </footer>
+</div>
+
+<script>
+    const GITHUB_REPO = "testdomaintestdomain/web-proxy-login-mikrotik-c";
+    const GHCR_IMAGE = "ghcr.io/testdomaintestdomain/proxy-login";
+    let currentTab = "setup";
+
+    const defaultValues = {
+        vethName: "proxy-login-veth",
+        bridgeName: "bridge1",
+        ipAddress: "172.30.1.2/24",
+        gateway: "172.30.1.1",
+        listenPort: "4567",
+        upstreamPort: "8080",
+        wanMode: "auto",
+        username: "proxyadmin",
+        password: "SuperSecret_2026",
+        storage: "auto",
+        scheduleUpdate: "yes"
+    };
+
+    function escapeRos(str) {
+        if (!str) return "";
+        return str.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\$/g, "\\$");
+    }
+
+    function generateCryptoString(length, chars) {
+        const arr = new Uint32Array(length);
+        window.crypto.getRandomValues(arr);
+        let str = "";
+        for (let i = 0; i < length; i++) {
+            str += chars[arr[i] % chars.length];
+        }
+        return str;
+    }
+
+    function randomizeInputs() {
+        const o2 = 18 + Math.floor(Math.random() * 13);
+        const o3 = 10 + Math.floor(Math.random() * 240);
+        document.getElementById("ipAddress").value = `172.${o2}.${o3}.2/24`;
+        document.getElementById("gateway").value = `172.${o2}.${o3}.1`;
+
+        const userChars = "abcdefghjkmnpqrstuvwxyz23456789";
+        document.getElementById("username").value = "usr_" + generateCryptoString(6, userChars);
+
+        const passChars = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@%^&*-_=+~";
+        document.getElementById("password").value = generateCryptoString(18, passChars);
+
+        const port = 10000 + Math.floor(Math.random() * 45000);
+        document.getElementById("listenPort").value = port;
+        document.getElementById("upstreamPort").value = port === 8080 ? 8081 : 8080;
+
+        updateAll();
+    }
+
+    function resetInputs() {
+        for (const [id, val] of Object.entries(defaultValues)) {
+            const el = document.getElementById(id);
+            if (el) el.value = val;
+        }
+        updateAll();
+    }
+
+    function getFormValues() {
+        const ipVal = document.getElementById("ipAddress").value.trim() || "172.30.1.2/24";
+        const gwVal = document.getElementById("gateway").value.trim() || "172.30.1.1";
+        const cidr = ipVal.includes("/") ? ipVal.split("/")[1] : "24";
+        const ipBare = ipVal.split("/")[0];
+        const subnet = gwVal.substring(0, gwVal.lastIndexOf(".")) + ".0/" + cidr;
+
+        return {
+            veth: document.getElementById("vethName").value.trim() || "proxy-login-veth",
+            bridge: document.getElementById("bridgeName").value.trim() || "bridge1",
+            ip: ipVal,
+            ipBare: ipBare,
+            gw: gwVal,
+            cidr: cidr,
+            subnet: subnet,
+            listenPort: parseInt(document.getElementById("listenPort").value) || 4567,
+            upstreamPort: parseInt(document.getElementById("upstreamPort").value) || 8080,
+            wanMode: document.getElementById("wanMode").value,
+            user: document.getElementById("username").value.trim() || "admin",
+            pass: document.getElementById("password").value.trim() || "password",
+            storage: document.getElementById("storage").value,
+            scheduleUpdate: document.getElementById("scheduleUpdate").value === "yes"
+        };
+    }
+
+    function generateSetupScript(c) {
+        const appName = "proxy-login";
+        const envList = "proxy_envs";
+        const dateStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+        let out = `# ============================================================
+# MikroTik WebProxy Auth-Shim Hardened Setup Script
+# Репозиторий : ${GITHUB_REPO}
+# Дата сборки : ${dateStr}
+# Совместимость: RouterOS 7.4 – 7.22+ (Проверено на 7.19.3)
+# ============================================================
+
+# 0. Проверка пакета Container
+:if ([:len [/system/package/find where name="container" disabled=no]] = 0) do={
+  :put "ОШИБКА: Пакет 'container' не установлен или выключен!"
+  :error "Установите пакет container, выполните /system/device-mode/update container=yes и перезагрузитесь."
+}
+`;
+
+        if (c.storage === 'auto') {
+            out += `
+# 1. Автоопределение хранилища (usb1 -> flash -> disk1)
+:global proxyDisk "disk1"
+{
+  :local usbFree 0
+  :do { :set usbFree [/disk/get [find where mount-point="usb1"] free] } on-error={}
+  :if ($usbFree > 0) do={
+    :set proxyDisk "usb1"
+    :put ("Найдено внешнее хранилище: usb1 (" . ($usbFree / 1048576) . " MB свободно)")
+  } else={
+    :if ([:len [/disk/find where slot="usb1"]] > 0) do={
+      :put "USB накопитель подключен, но не отформатирован. Форматирование..."
+      /disk/format-drive usb1 file-system=ext4 label=usb1
+      :delay 3s
+      :set proxyDisk "usb1"
+    } else={
+      :local freeHdd [/system/resource/get free-hdd-space]
+      :local hasFlash ([:len [/file/find where name="flash" and type="directory"]] > 0)
+      :if ($hasFlash) do={
+        :set proxyDisk "flash"
+        :put ("Выбран каталог flash/ (Свободно: " . ($freeHdd / 1024) . " KB)")
+      } else={
+        :set proxyDisk "disk1"
+        :put ("Выбран системный накопитель disk1 (Свободно: " . ($freeHdd / 1024) . " KB)")
+      }
+    }
+  }
+}
+`;
+        }
+
+        out += `
+# 2. Регистрация встроенного скрипта чистого удаления на роутере
+/system/script/remove [find where comment~"${appName}" and name="${appName}-uninstall"]
+/system/script/add name="${appName}-uninstall" comment="${appName}" source={
+  :local tag "${appName}"
+  :put ("Начало полной деинсталляции службы " . $tag . "...")
+
+  # 1. Остановка и удаление контейнера
+  :do {
+    /container/stop [find where comment~$tag or name~$tag]
+    :delay 3s
+    /container/remove [find where comment~$tag or name~$tag]
+  } on-error={}
+
+  # 2. Очистка переменных окружения
+  :do { /container/envs/remove [find where name="proxy_envs" or list="proxy_envs" or name="web_proxy" or list="web_proxy"] } on-error={}
+  :do { /container/envs/remove [find where key="PROXY_USER" or key="PROXY_PASS" or key="UPSTREAM_HOST" or key="UPSTREAM_PORT" or key="LISTEN_PORT"] } on-error={}
+
+  # 3. Очистка Firewall (NAT и Filter)
+  /ip/firewall/nat/remove [find where comment~$tag]
+  /ip/firewall/filter/remove [find where comment~$tag]
+
+  # 4. Очистка Web-Proxy Access и отключение
+  /ip/proxy/access/remove [find where comment~$tag]
+  /ip/proxy/set enabled=no
+
+  # 5. Удаление VETH и порта Bridge
+  /interface/bridge/port/remove [find where comment~$tag]
+  /interface/veth/remove [find where comment~$tag]
+
+  # 6. Удаление IP-адреса и Bridge (Bridge удалится только если был создан нашим скриптом с этим комментарием!)
+  /ip/address/remove [find where comment~$tag]
+  /interface/bridge/remove [find where comment~$tag]
+
+  # 7. Очистка файлов и каталогов
+  :do { /file/remove [find where name~$tag] } on-error={}
+  :do { /file/remove [find where name=("flash/" . $tag)] } on-error={}
+  :do { /file/remove [find where name=("usb1/" . $tag)] } on-error={}
+
+  # 8. Удаление задач планировщика и скрипта обновления
+  :do { /system/scheduler/remove [find where comment~$tag] } on-error={}
+  :do { /system/script/remove [find where comment~$tag and name!=($tag . "-uninstall")] } on-error={}
+
+  :put "============================================================"
+  :put ("✔ Все компоненты " . $tag . " успешно и бесследно удалены!")
+  :put "============================================================"
+  /system/script/remove [find where name=($tag . "-uninstall")]
+}
+
+# 3. Настройка виртуальной сети (Bridge, VETH) с единым комментарием ${appName}
+:if ([:len [/interface/bridge/find where name="${c.bridge}"]] = 0) do={
+  /interface/bridge/add name="${c.bridge}" comment="${appName}"
+}
+:if ([:len [/ip/address/find where interface="${c.bridge}" address="${c.gw}/${c.cidr}"]] = 0) do={
+  /ip/address/add address="${c.gw}/${c.cidr}" interface="${c.bridge}" comment="${appName}"
+}
+
+:if ([:len [/interface/veth/find where name="${c.veth}"]] = 0) do={
+  /interface/veth/add name="${c.veth}" address="${c.ip}" gateway="${c.gw}" comment="${appName}"
+}
+:if ([:len [/interface/bridge/port/find where interface="${c.veth}"]] = 0) do={
+  /interface/bridge/port add bridge="${c.bridge}" interface="${c.veth}" comment="${appName}"
+}
+
+# 4. Интеллектуальное определение WAN, DST-NAT и защитный Firewall
+{
+  :local wanParam ""
+  :local ifName ""
+`;
+
+        if (c.wanMode === 'auto') {
+            out += `
+  # Уровень 1: Поиск активного DHCP-клиента (CHR / Ethernet провайдер)
+  :local dhcpClients [/ip/dhcp-client/find where (default-route=yes or add-default-route=yes) and disabled=no]
+  :if ([:len $dhcpClients] > 0) do={
+    :local dIf [/ip/dhcp-client/get [:pick $dhcpClients 0] interface]
+    :if ([:len [/interface/find where name=$dIf]] > 0) do={
+      :set ifName $dIf
+      :set wanParam ("in-interface=" . $ifName)
+      :put ("Автоопределение WAN [Level 1 - DHCP]: интерфейс '" . $ifName . "'")
+    }
+  }
+
+  # Уровень 2: Список интерфейсов 'WAN'
+  :if ($wanParam = "") do={
+    :if ([:len [/interface/list/find where name="WAN"]] > 0 && [:len [/interface/list/member/find where list="WAN"]] > 0) do={
+      :set wanParam "in-interface-list=WAN"
+      :put "Автоопределение WAN [Level 2 - List]: список 'WAN'"
+    }
+  }
+
+  # Уровень 3: PPPoE-клиент
+  :if ($wanParam = "") do={
+    :local pppoeClients [/interface/pppoe-client/find where add-default-route=yes and disabled=no]
+    :if ([:len $pppoeClients] > 0) do={
+      :local pIf [/interface/pppoe-client/get [:pick $pppoeClients 0] name]
+      :set ifName $pIf
+      :set wanParam ("in-interface=" . $ifName)
+      :put ("Автоопределение WAN [Level 3 - PPPoE]: интерфейс '" . $ifName . "'")
+    }
+  }
+
+  # Уровень 4: Анализ таблицы маршрутизации /ip/route (0.0.0.0/0)
+  :if ($wanParam = "") do={
+    :local defRoutes [/ip/route/find where dst-address="0.0.0.0/0" and active=yes]
+    :if ([:len $defRoutes] > 0) do={
+      :local rId [:pick $defRoutes 0]
+      :local immGw ""
+      :do { :set immGw [/ip/route/get $rId immediate-gw] } on-error={}
+
+      :if ($immGw ~ "%") do={
+        :set ifName [:pick $immGw ([:find $immGw "%"] + 1) [:len $immGw]]
+      } else={
+        :if ([:len [/interface/find where name=$immGw]] > 0) do={
+          :set ifName $immGw
+        } else={
+          :local gwStat ""
+          :do { :set gwStat [/ip/route/get $rId gateway-status] } on-error={}
+          :if ($gwStat ~ "via ") do={
+            :local viaPos [:find $gwStat "via "]
+            :local rawIf [:pick $gwStat ($viaPos + 4) [:len $gwStat]]
+            :if ([:find $rawIf " "] != nil) do={
+              :set rawIf [:pick $rawIf 0 [:find $rawIf " "]]
+            }
+            :if ([:len [/interface/find where name=$rawIf]] > 0) do={
+              :set ifName $rawIf
+            }
+          }
+        }
+      }
+      :if ([:len $ifName] > 0 && [:len [/interface/find where name=$ifName]] > 0) do={
+        :set wanParam ("in-interface=" . $ifName)
+        :put ("Автоопределение WAN [Level 4 - Route]: интерфейс '" . $ifName . "'")
+      }
+    }
+  }
+
+  :if ($wanParam = "") do={
+    :put "Предупреждение: WAN-интерфейс не определен автоматически. Правила созданы без привязки к in-interface."
+  }
+`;
+        } else if (c.wanMode === 'wan_list') {
+            out += `  :set wanParam "in-interface-list=WAN"\n  :put "Внешний интерфейс: in-interface-list=WAN"\n`;
+        } else if (c.wanMode === 'all') {
+            out += `  :set wanParam ""\n  :put "Внешний интерфейс: Все интерфейсы"\n`;
+        } else {
+            out += `  :set wanParam "in-interface=${c.wanMode}"\n  :put "Внешний интерфейс: in-interface=${c.wanMode}"\n`;
+        }
+
+        out += `
+  # Очистка старых правил NAT и Filter с тегом ${appName}
+  /ip/firewall/nat/remove [find where comment~"${appName}"]
+  /ip/firewall/filter/remove [find where comment~"${appName}"]
+
+  # DST-NAT: проброс порта авторизации ${c.listenPort} на контейнер ${c.ipBare}
+  :local natCmd ("/ip/firewall/nat/add chain=dstnat protocol=tcp dst-port=${c.listenPort} action=dst-nat to-addresses=${c.ipBare} to-ports=${c.listenPort} comment=\\"${appName}\\"")
+  :if ($wanParam != "") do={
+    :set natCmd ($natCmd . " " . $wanParam)
+  }
+  [:parse $natCmd]
+
+  # Защита от прямого подключения к upstream порту ${c.upstreamPort} только извне (WAN)
+  :local dropInCmd ("/ip/firewall/filter/add chain=input protocol=tcp dst-port=${c.upstreamPort} action=drop comment=\\"${appName}\\"")
+  :local dropFwdCmd ("/ip/firewall/filter/add chain=forward protocol=tcp dst-port=${c.upstreamPort} action=drop comment=\\"${appName}\\"")
+  :if ($wanParam != "") do={
+    :set dropInCmd ($dropInCmd . " " . $wanParam)
+    :set dropFwdCmd ($dropFwdCmd . " " . $wanParam)
+  }
+  [:parse $dropInCmd]
+  [:parse $dropFwdCmd]
+
+  # Разрешение входящего авторизованного трафика контейнера в forward
+  /ip/firewall/filter/add chain=forward dst-address=${c.ipBare} protocol=tcp dst-port=${c.listenPort} action=accept comment="${appName}"
+}
+
+# 5. Настройка и жесткая изоляция внутреннего Web-Proxy (/ip/proxy)
+/ip/proxy/set enabled=yes port=${c.upstreamPort} max-cache-size=none max-client-connections=600 max-server-connections=600
+
+# Access List: доступ разрешен ИСКЛЮЧИТЕЛЬНО с IP контейнера ${c.ipBare}, всем остальным - DENY
+/ip/proxy/access/remove [find where comment~"${appName}"]
+/ip/proxy/access/add src-address="${c.ipBare}" action=allow comment="${appName}"
+/ip/proxy/access/add action=deny comment="${appName}"
+
+# 6. Переменные окружения контейнера (Корректный синтаксис /container/envs/add)
+{
+  :local envGroup "${envList}"
+  :local pUser "${escapeRos(c.user)}"
+  :local pPass "${escapeRos(c.pass)}"
+  :local pHost "${c.gw}"
+  :local pUport "${c.upstreamPort}"
+  :local pLport "${c.listenPort}"
+
+  # 1. Очистка старых переменных перед записью
+  :do { /container/envs/remove [find where name=$envGroup or list=$envGroup] } on-error={}
+  :do { /container/envs/remove [find where key="PROXY_USER" or key="PROXY_PASS" or key="UPSTREAM_HOST" or key="UPSTREAM_PORT" or key="LISTEN_PORT"] } on-error={}
+
+  # 2. Добавление чистых переменных через динамический parse
+  :local setEnv do={
+    :local g $1; :local k $2; :local v $3;
+    :local ok false
+    :do {
+      [:parse ("/container/envs/add name=\\\"" . $g . "\\\" key=\\\"" . $k . "\\\" value=\\\"" . $v . "\\\"")]
+      :set ok true
+    } on-error={}
+    :if (!$ok) do={
+      :do {
+        [:parse ("/container/envs/add list=\\\"" . $g . "\\\" key=\\\"" . $k . "\\\" value=\\\"" . $v . "\\\"")]
+      } on-error={}
+    }
+  }
+
+  $setEnv $envGroup "PROXY_USER" $pUser
+  $setEnv $envGroup "PROXY_PASS" $pPass
+  $setEnv $envGroup "UPSTREAM_HOST" $pHost
+  $setEnv $envGroup "UPSTREAM_PORT" $pUport
+  $setEnv $envGroup "LISTEN_PORT" $pLport
+
+  :put ("Переменные окружения успешно созданы: " . $envGroup)
+}
+
+# 7. Развертывание и гарантированное пересоздание контейнера с тегом ${appName}
+{
+  :local appName "${appName}"
+  :local envList "${envList}"
+  :local vethName "${c.veth}"
+  :local targetDisk "${c.storage === 'auto' ? '$proxyDisk' : c.storage}"
+
+  :local arch [/system/resource/get architecture-name]
+  :local ver [/system/resource/get version]
+  :local dotPos [:find $ver "."]
+  :local rest [:pick $ver ($dotPos + 1) [:len $ver]]
+  :local endPos [:find $rest "."]
+  :if ([:typeof $endPos] = "nil") do={ :set endPos [:find $rest " "] }
+  :if ([:typeof $endPos] = "nil") do={ :set endPos [:len $rest] }
+  :local minor [:tonum [:pick $rest 0 $endPos]]
+  :if ([:typeof $minor] = "nil") do={ :set minor 0 }
+
+  :local imgTag "latest"
+  :local fileSuffix ""
+  :if ($minor <= 20) do={ :set fileSuffix "-7.20-Docker" }
+
+  :local fileArch "amd64"
+  :if ($arch = "arm64") do={ :set fileArch "arm64" }
+  :if ($arch ~ "x86") do={ :set fileArch "amd64" }
+  :if ($arch = "arm") do={
+    :set fileArch "arm"
+    :local rbModel ""
+    :do { :set rbModel [[:parse ":return [/system/routerboard/get model]"]] } on-error={}
+    :local bName [/system/resource/get board-name]
+    :if ($rbModel~"E50UG" || $rbModel~"E60iUGS" || $bName~"E50UG" || $bName~"E60iUGS" || $bName~"^hEX") do={
+      :set fileArch "armv5"
+      :set imgTag "latest-armv5"
+    }
+  }
+
+  :local rootTarget ""
+  :local filePath ""
+  :local fileName ("proxy-login-" . $fileArch . $fileSuffix . ".tar.gz")
+
+  :if ($targetDisk = "flash") do={
+    :set rootTarget ("flash/" . $appName)
+    :set filePath ("flash/" . $fileName)
+  } else={
+    :if ($targetDisk = "usb1") do={
+      :set rootTarget ("usb1/" . $appName)
+      :set filePath ("usb1/" . $fileName)
+    } else={
+      :set rootTarget $appName
+      :set filePath $fileName
+    }
+  }
+
+  :local regImg ("${GHCR_IMAGE}:" . $imgTag)
+  :local fetchUrl ("https://github.com/${GITHUB_REPO}/releases/latest/download/" . $fileName)
+
+  # 1. Если контейнер уже существует — корректно останавливаем и удаляем старый инстанс для применения новых переменных
+  :local oldCid [/container/find where comment~$appName or name~$appName]
+  :if ([:len $oldCid] > 0) do={
+    :put ("Обнаружен контейнер " . $appName . ". Остановка и пересоздание для применения новых настроек...")
+    :do { /container/stop $oldCid } on-error={}
+    :local stopWait 0
+    :while (([/container/get $oldCid status] = "running") && $stopWait < 15) do={
+      :delay 1s
+      :set stopWait ($stopWait + 1)
+    }
+    :delay 2s
+    /container/remove $oldCid
+    :delay 2s
+  }
+
+  :local added false
+
+  # Вариант А: RouterOS 7.22+ загрузка из GHCR
+  :if ($minor >= 22) do={
+    :put ("Загрузка контейнера из реестра GHCR: " . $regImg)
+    :do {
+      /container/add remote-image=$regImg name=$appName interface=$vethName envlist=$envList root-dir=$rootTarget logging=yes start-on-boot=yes dns=8.8.8.8,1.1.1.1 hostname="proxy_login" workdir="/" comment=$appName
+    } on-error={
+      :do { [:parse ("/container/add remote-image=\\"" . $regImg . "\\" name=\\"" . $appName . "\\" interface=\\"" . $vethName . "\\" envs=\\"" . $envList . "\\" root-dir=\\"" . $rootTarget . "\\" logging=yes start-on-boot=yes dns=8.8.8.8,1.1.1.1 hostname=\\"proxy_login\\" workdir=\\"/\\" comment=\\"" . $appName . "\\"")] } on-error={}
+    }
+    :local waited 0
+    :while ([:len [/container/get [find where comment~$appName or name=$appName] image-id]] = 0 && $waited < 120) do={
+      :delay 3s
+      :set waited ($waited + 3)
+    }
+    :if ([:len [/container/get [find where comment~$appName or name=$appName] image-id]] > 0) do={
+      :set added true
+      :put "Образ успешно получен из реестра GHCR!"
+    } else={
+      :put "Сбой реестра GHCR, переключение на загрузку архива через fetch..."
+      :do { /container/remove [find where comment~$appName or name=$appName] } on-error={}
+      :delay 2s
+    }
+  }
+
+  # Вариант Б: Загрузка архива для версий < 7.22 или при сбое реестра
+  :if (!$added) do={
+    :if ($fetchUrl != "" && $filePath != "") do={
+      :put ("Скачивание релизного тарбола: " . $fetchUrl)
+      :do {
+        /tool/fetch url=$fetchUrl dst-path=$filePath mode=https http-header-field="User-Agent: MikroTik" http-max-redirect-count=10
+      } on-error={
+        :put "Повторная попытка загрузки без проверки сертификата..."
+        /tool/fetch url=$fetchUrl dst-path=$filePath mode=https check-certificate=no http-max-redirect-count=10
+      }
+      :delay 2s
+      :do {
+        /container/add file=$filePath name=$appName interface=$vethName envlist=$envList root-dir=$rootTarget logging=yes start-on-boot=yes dns=8.8.8.8,1.1.1.1 hostname="proxy_login" workdir="/" comment=$appName
+      } on-error={
+        :do { [:parse ("/container/add file=\\"" . $filePath . "\\" name=\\"" . $appName . "\\" interface=\\"" . $vethName . "\\" envs=\\"" . $envList . "\\" root-dir=\\"" . $rootTarget . "\\" logging=yes start-on-boot=yes dns=8.8.8.8,1.1.1.1 hostname=\\"proxy_login\\" workdir=\\"/\\" comment=\\"" . $appName . "\\"")] } on-error={}
+      }
+      :delay 5s
+      :do { /file/remove [find where name=$filePath] } on-error={}
+      :do { /file/remove [find where name=$fileName] } on-error={}
+    }
+  }
+
+  :do { [:parse ("/container/set [find where comment~\\\"" . $appName . "\\\" or name=\\\"" . $appName . "\\\"] shm-size=4M")] } on-error={}
+  :do { [:parse ("/container/set [find where comment~\\\"" . $appName . "\\\" or name=\\\"" . $appName . "\\\"] ignore-remote-image-change=yes")] } on-error={}
+  :do { [:parse ("/container/set [find where comment~\\\"" . $appName . "\\\" or name=\\\"" . $appName . "\\\"] restart-policy=on-failure restart-interval=30s restart-max-count=10")] } on-error={}
+
+  :do { /container/start [find where comment~$appName or name=$appName] } on-error={}
+  :delay 2s
+  :put "============================================================"
+  :put ("  " . $appName . " запущен! Внешний порт авторизации: ${c.listenPort}")
+  :put ("  Прямой доступ к Upstream ${c.upstreamPort} надежно заблокирован.")
+  :put "============================================================"
+
+`;
+
+        if (c.scheduleUpdate) {
+            out += `
+# 8. Планировщик автообновления и скрипт самовосстановления (RouterOS 7.4 - 7.22+)
+
+  :local aName "${appName}"
+  
+  /system/script/remove [find where comment~$aName and name=($aName . "-update")]
+  /system/script/add name=($aName . "-update") comment=$aName source={
+    :local aName "proxy-login"
+    :local cids [/container/find where comment~$aName or name=$aName]
+    :if ([:len $cids] = 0) do={
+      :log error ("[proxy-login-update] Контейнер '" . $aName . "' не найден!")
+    } else={
+      :local cid [:pick $cids 0]
+      :local rImg [/container/get $cid remote-image]
+      :local repullOk false
+
+      # Режим 1: RouterOS 7.22+ (Реестр GHCR через динамический repull)
+      :if ($rImg != "") do={
+        :log info "[proxy-login-update] Проверка обновления из реестра GHCR..."
+        :do {
+          [:parse ("/container/set " . $cid . " ignore-remote-image-change=yes")]
+          [:parse ("/container/repull " . $cid)]
+          :local waited 0
+          :while ([:len [/container/get $cid image-id]] = 0 && $waited < 120) do={
+            :delay 3s
+            :set waited ($waited + 3)
+          }
+          /container/start $cid
+          :set repullOk true
+          :log info ("[proxy-login-update] Контейнер '" . $aName . "' успешно обновлен через repull!")
+        } on-error={
+          :log info "[proxy-login-update] Команда repull не поддерживается на данной версии ROS, переключение на архив GitHub..."
+        }
+      }
+
+      # Режим 2: RouterOS 7.4 - 7.21 (или при сбое repull) - скачивание архива с GitHub
+      :if (!$repullOk) do={
+        :log info "[proxy-login-update] Проверка обновления через релизный архив GitHub..."
+        :local arch [/system/resource/get architecture-name]
+        :local ver [/system/resource/get version]
+        :local dotPos [:find $ver "."]
+        :local rest [:pick $ver ($dotPos + 1) [:len $ver]]
+        :local endPos [:find $rest "."]
+        :if ([:typeof $endPos] = "nil") do={ :set endPos [:find $rest " "] }
+        :if ([:typeof $endPos] = "nil") do={ :set endPos [:len $rest] }
+        :local minor [:tonum [:pick $rest 0 $endPos]]
+        :if ([:typeof $minor] = "nil") do={ :set minor 0 }
+        
+        :local fileSuffix ""
+        :if ($minor <= 20) do={ :set fileSuffix "-7.20-Docker" }
+        :local fileArch "amd64"
+        :if ($arch = "arm64") do={ :set fileArch "arm64" }
+        :if ($arch ~ "x86") do={ :set fileArch "amd64" }
+        :if ($arch = "arm") do={
+          :set fileArch "arm"
+          :local rbModel ""
+          :do { :set rbModel [[:parse ":return [/system/routerboard/get model]"]] } on-error={}
+          :local bName [/system/resource/get board-name]
+          :if ($rbModel~"E50UG" || $rbModel~"E60iUGS" || $bName~"E50UG" || $bName~"E60iUGS" || $bName~"^hEX") do={
+            :set fileArch "armv5"
+          }
+        }
+        
+        :local fileName ("proxy-login-" . $fileArch . $fileSuffix . ".tar.gz")
+        :local dlUrl ("https://github.com/${GITHUB_REPO}/releases/latest/download/" . $fileName)
+        :local dlPath $fileName
+        :local rDir [/container/get $cid root-dir]
+        :local iface [/container/get $cid interface]
+        :local eList [/container/get $cid envlist]
+        
+        :do {
+          /tool/fetch url=$dlUrl dst-path=$dlPath mode=https check-certificate=no http-max-redirect-count=10
+          :delay 3s
+          /container/stop $cid
+          :delay 3s
+          /container/remove $cid
+          :delay 2s
+          /container/add file=$dlPath name=$aName interface=$iface envlist=$eList root-dir=$rDir logging=yes start-on-boot=yes dns=8.8.8.8,1.1.1.1 hostname="proxy_login" workdir="/" comment=$aName
+          :delay 3s
+          /container/start [find where comment~$aName or name=$aName]
+          :delay 2s
+          :do { /file/remove [find where name=$dlPath] } on-error={}
+          :log info ("[proxy-login-update] Контейнер '" . $aName . "' успешно обновлен из архива GitHub!")
+        } on-error={
+          :log error "[proxy-login-update] Ошибка скачивания или применения обновления!"
+        }
+      }
+    }
+  }
+
+  /system/scheduler/remove [find where comment~$aName and name=($aName . "-update")]
+  /system/scheduler/add name=($aName . "-update") on-event=($aName . "-update") start-time=04:30:00 interval=1d comment=$aName
+  :put ("Планировщик автообновления успешно создан: " . $aName . "-update (04:30 daily)")
+}
+`;
+        }
+
+        return out;
+    }
+
+    function generateVerifyScript(c) {
+        return `# ============================================================
+# Тестирование прокси-сервера и валидация защиты Firewall
+# ============================================================
+
+# 1. Запрос БЕЗ авторизации на порт ${c.listenPort} -> Ожидается HTTP 407
+curl -i -x http://${c.gw}:${c.listenPort} http://example.com
+
+# 2. Запрос с корректным логином и паролем -> Ожидается HTTP 200 OK
+curl -i -x http://${c.gw}:${c.listenPort} \\
+     --proxy-user "${c.user}:${c.pass}" \\
+     http://example.com
+
+# 3. Проверка HTTPS CONNECT туннеля через авторизацию
+curl -i -x http://${c.gw}:${c.listenPort} \\
+     --proxy-user "${c.user}:${c.pass}" \\
+     https://cloudflare.com
+
+# 4. Проверка защиты Upstream (прямой доступ к порту ${c.upstreamPort} из WAN должен быть заблокирован!)
+curl -i --connect-timeout 3 -x http://${c.gw}:${c.upstreamPort} http://example.com
+
+# 5. Проверка счетчиков обращений в RouterOS:
+# /ip/proxy/access/print detail where comment~"proxy-login"
+`;
+    }
+
+    function generateUpdateScript() {
+        return `# ============================================================
+# Ручной запуск скрипта обновления с проверкой статуса
+# ============================================================
+
+:put "Запуск процедуры обновления proxy-login..."
+/system/script/run proxy-login-update
+:delay 3s
+/log/print where message~"proxy-login"
+`;
+    }
+
+    function generateUninstallScript() {
+        const appName = "proxy-login";
+        return `# ============================================================
+# ПОЛНОЕ УДАЛЕНИЕ PROXY-LOGIN И ВОЗВРАТ РОУТЕРА В ИСХОДНЫЙ ВИД
+# ============================================================
+
+:local tag "${appName}"
+:put ("Начало полной деинсталляции службы " . $tag . "...")
+
+# 1. Остановка и удаление контейнера
+:do {
+  /container/stop [find where comment~$tag or name~$tag]
+  :delay 3s
+  /container/remove [find where comment~$tag or name~$tag]
+} on-error={}
+
+# 2. Прямая и безопасная очистка переменных окружения
+:do { /container/envs/remove [find where name="proxy_envs" or list="proxy_envs" or name="web_proxy" or list="web_proxy"] } on-error={}
+:do { /container/envs/remove [find where key="PROXY_USER" or key="PROXY_PASS" or key="UPSTREAM_HOST" or key="UPSTREAM_PORT" or key="LISTEN_PORT"] } on-error={}
+
+# 3. Очистка правил Firewall (NAT и Filter)
+/ip/firewall/nat/remove [find where comment~$tag]
+/ip/firewall/filter/remove [find where comment~$tag]
+
+# 4. Отключение и очистка Web-Proxy
+/ip/proxy/access/remove [find where comment~$tag]
+/ip/proxy/set enabled=no
+
+# 5. Удаление VETH и порта Bridge
+/interface/bridge/port/remove [find where comment~$tag]
+/interface/veth/remove [find where comment~$tag]
+
+# 6. Удаление IP-адреса и Bridge (Bridge удалится только если сам Bridge был создан с тегом proxy-login!)
+/ip/address/remove [find where comment~$tag]
+/interface/bridge/remove [find where comment~$tag]
+
+# 7. Очистка файловой системы от архивов и каталогов
+:do { /file/remove [find where name~$tag] } on-error={}
+:do { /file/remove [find where name=("flash/" . $tag)] } on-error={}
+:do { /file/remove [find where name=("usb1/" . $tag)] } on-error={}
+
+# 8. Удаление задач планировщика и скриптов
+:do { /system/scheduler/remove [find where comment~$tag] } on-error={}
+:do { /system/script/remove [find where comment~$tag] } on-error={}
+
+:put "============================================================"
+:put ("✔ Все компоненты " . $tag . " успешно и бесследно удалены!")
+:put "============================================================"
+`;
+    }
+
+    function highlightSyntax(code) {
+        function esc(s) {
+            return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        return code.split('\n').map(line => {
+            if (/^\s*#/.test(line)) {
+                return `<span class="c-comment">${esc(line)}</span>`;
+            }
+            let res = esc(line);
+            res = res.replace(/^(\s*\/[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*)/, '<span class="c-cmd">$1</span>');
+            res = res.replace(/(".*?")/g, '<span class="c-str">$1</span>');
+            res = res.replace(/(:(?:if|else|local|global|set|put|error|while|do|len|pick|tonum|typeof|parse|log|foreach|for|return))\b/g, '<span class="c-kw">$1</span>');
+            res = res.replace(/\b(on-error|from|to)\b/g, '<span class="c-kw">$1</span>');
+            res = res.replace(/(\$[a-zA-Z0-9_]+)/g, '<span class="c-var">$1</span>');
+            res = res.replace(/\b([0-9]+)\b/g, '<span class="c-num">$1</span>');
+            return res;
+        }).join('\n');
+    }
+
+    function getCurrentRawCode() {
+        const c = getFormValues();
+        switch (currentTab) {
+            case "setup": return generateSetupScript(c);
+            case "verify": return generateVerifyScript(c);
+            case "update": return generateUpdateScript();
+            case "uninstall": return generateUninstallScript();
+            default: return "";
+        }
+    }
+
+    function updateAll() {
+        const raw = getCurrentRawCode();
+        const codeEl = document.getElementById("codeOutput");
+        codeEl.innerHTML = highlightSyntax(raw);
+        codeEl.dataset.raw = raw;
+
+        const info = document.getElementById("viewInfo");
+        const downloadBtn = document.getElementById("btnDownload");
+        if (currentTab === "setup") {
+            info.textContent = "RouterOS Setup Script (.rsc)";
+            downloadBtn.style.display = "inline-flex";
+            downloadBtn.textContent = "💾 Скачать .rsc";
+        } else if (currentTab === "verify") {
+            info.textContent = "Bash / cURL Validation Commands";
+            downloadBtn.style.display = "none";
+        } else if (currentTab === "update") {
+            info.textContent = "RouterOS Maintenance Script";
+            downloadBtn.style.display = "none";
+        } else if (currentTab === "uninstall") {
+            info.textContent = "RouterOS Full Cleanup / Uninstall Script";
+            downloadBtn.style.display = "inline-flex";
+            downloadBtn.textContent = "💾 Скачать uninstall.rsc";
+        }
+    }
+
+    document.querySelectorAll("input, select").forEach(el => {
+        el.addEventListener("input", updateAll);
+        el.addEventListener("change", updateAll);
+    });
+
+    document.querySelectorAll(".tab-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            currentTab = btn.dataset.tab;
+            updateAll();
+        });
+    });
+
+    document.getElementById("btnRandom").addEventListener("click", randomizeInputs);
+    document.getElementById("btnReset").addEventListener("click", resetInputs);
+
+    const passInput = document.getElementById("password");
+    document.getElementById("togglePassBtn").addEventListener("click", () => {
+        passInput.type = passInput.type === "password" ? "text" : "password";
+    });
+
+    document.getElementById("btnCopy").addEventListener("click", () => {
+        const raw = getCurrentRawCode();
+        if (!raw) return;
+
+        navigator.clipboard.writeText(raw).then(() => {
+            const btn = document.getElementById("btnCopy");
+            const oldText = btn.innerHTML;
+            btn.innerHTML = "✔ Скопировано!";
+            btn.classList.add("success");
+            setTimeout(() => {
+                btn.innerHTML = oldText;
+                btn.classList.remove("success");
+            }, 2000);
+        });
+    });
+
+    document.getElementById("btnDownload").addEventListener("click", () => {
+        const raw = getCurrentRawCode();
+        const filename = currentTab === "uninstall" ? "proxy-login-uninstall.rsc" : "proxy-login-setup.rsc";
+        const blob = new Blob([raw], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+
+    updateAll();
+</script>
+</body>
+</html>
