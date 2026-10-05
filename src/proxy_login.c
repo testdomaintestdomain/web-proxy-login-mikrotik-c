@@ -566,6 +566,7 @@ struct connection {
 
     size_t reg_idx;      /* index into the worker's live-connection registry */
     int    registered;
+    int    dead;         /* retired this batch; freed after the dispatch loop */
 };
 
 /* Per-worker registry of live connections, used only for the deadline sweep. */
@@ -574,6 +575,11 @@ typedef struct {
     size_t count, cap;
 } conn_list_t;
 static __thread conn_list_t *t_live = NULL;
+/* Retired-but-not-yet-freed connections. A single epoll_wait batch can carry
+ * events for both fds of one connection; if the first frees it, the second
+ * would dereference freed memory. So conn_close only *retires* (closes fds,
+ * nulls the back-pointers), and the connection is freed after the batch. */
+static __thread conn_list_t *t_zombies = NULL;
 
 /* Forward decls */
 static void conn_close(int epfd, connection_t *c);
@@ -709,22 +715,48 @@ static int conn_update_epoll(int epfd, connection_t *c) {
     return 0;
 }
 
+/* Retire a connection: close its fds, remove it from epoll and the live
+ * registry, and null the epoll back-pointers so any already-dequeued event for
+ * this connection in the current batch is recognised as stale and skipped. The
+ * memory is reclaimed later by conn_reap(), never inline, to avoid a
+ * use-after-free on a sibling event in the same epoll_wait batch. */
 static void conn_close(int epfd, connection_t *c) {
-    if (!c) return;
+    if (!c || c->dead) return;
     if (t_live) cl_remove(t_live, c);
     if (c->client_fd >= 0) {
         epoll_ctl(epfd, EPOLL_CTL_DEL, c->client_fd, NULL);
         close(c->client_fd);
+        c->client_fd = -1;
     }
     if (c->upstream_fd >= 0) {
         epoll_ctl(epfd, EPOLL_CTL_DEL, c->upstream_fd, NULL);
         close(c->upstream_fd);
+        c->upstream_fd = -1;
     }
-    if (c->hbuf) { free(c->hbuf); }
-    if (c->c2u)  { free(c->c2u); }
-    if (c->u2c)  { free(c->u2c); }
-    free(c);
+    c->client_ref.conn = NULL;      /* stale events in this batch see NULL     */
+    c->upstream_ref.conn = NULL;
+    c->dead = 1;
     atomic_fetch_sub(&g_conn_count, 1);
+    if (t_zombies) {
+        cl_add(t_zombies, c);       /* freed after the dispatch loop           */
+    } else {
+        /* No deferral context (shouldn't happen on the worker path): free now. */
+        free(c->hbuf); free(c->c2u); free(c->u2c); free(c);
+    }
+}
+
+/* Free all retired connections. Safe to call only when no live epoll event
+ * still references them (i.e. between batches, and after the sweep). */
+static void conn_reap(void) {
+    if (!t_zombies) return;
+    for (size_t i = 0; i < t_zombies->count; i++) {
+        connection_t *c = t_zombies->items[i];
+        free(c->hbuf);
+        free(c->c2u);
+        free(c->u2c);
+        free(c);
+    }
+    t_zombies->count = 0;
 }
 
 /* Transition from header phase into relay once upstream is connected. Moves
@@ -1034,7 +1066,9 @@ static void *worker_main(void *arg) {
     int listen_fd = wa->listen_fd;
 
     conn_list_t live = {0};
+    conn_list_t zombies = {0};
     t_live = &live;
+    t_zombies = &zombies;
 
     int epfd = epoll_create1(EPOLL_CLOEXEC);
     if (epfd < 0) { log_msg("[FATAL] epoll_create1: %s", strerror(errno)); return NULL; }
@@ -1072,6 +1106,9 @@ static void *worker_main(void *arg) {
                 continue;
             }
             connection_t *c = ref->conn;
+            /* A sibling event earlier in this same batch may have retired this
+             * connection (conn_close nulls ref->conn). Skip the stale event. */
+            if (c == NULL || c->dead) continue;
             uint32_t e = evs[i].events;
 
             if (c->state == ST_HEADER) {
@@ -1089,19 +1126,27 @@ static void *worker_main(void *arg) {
             }
         }
 
+        /* All events in this batch are processed: now it is safe to free the
+         * connections retired during it. */
+        conn_reap();
+
         if (now_ms() >= next_sweep) {
             sweep_deadlines(epfd);
+            conn_reap();
             next_sweep = now_ms() + SWEEP_INTERVAL_MS;
         }
     }
 
     /* Shutdown: free any connections still in flight so no memory/fds leak. */
     while (live.count > 0) conn_close(epfd, live.items[0]);
+    conn_reap();
 
     free(evs);
     free(live.items);
+    free(zombies.items);
     close(epfd);
     t_live = NULL;
+    t_zombies = NULL;
     return NULL;
 }
 

@@ -353,15 +353,33 @@ def main():
         check("slowloris connection reaped by header deadline", reaped)
         slow.close()
 
-        print("== BRUTE-FORCE THROTTLE ==")
-        # Many failures from this IP should eventually get throttled; since all
-        # traffic is 127.0.0.1 we just confirm failures keep returning 407 and
-        # the valid path is unaffected from the same host only after reset window
-        # is impractical here, so we assert the daemon stays healthy under a burst.
-        for _ in range(15):
-            http_get_via_proxy(listen_port, "alice:wrong")
-        check("daemon healthy after failed-auth burst",
-              status_code(http_get_via_proxy(listen_port)) == 407)
+        print("== ABRUPT RST DURING RELAY (no crash) ==")
+        # Establish echo tunnels, push data so the upstream side has an inbound
+        # event, then hard-RST the client (SO_LINGER=0) mid-relay. Exercises the
+        # EPOLLERR/EPOLLHUP teardown paths. Sequential and well under MAX_CONN so
+        # it is reliable; the deterministic use-after-free regression is covered
+        # by the C unit test (test_deferred_free).
+        import struct as _struct
+        for _ in range(24):
+            try:
+                t = socket.create_connection((HOST, listen_port), timeout=2)
+                t.sendall(f"CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n"
+                          f"Proxy-Authorization: Basic {token}\r\n\r\n".encode())
+                t.recv(128)
+                t.sendall(b"X" * 2048)
+                t.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, _struct.pack("ii", 1, 0))
+                t.close()
+            except OSError:
+                pass
+        alive = proc.poll() is None
+        served = False
+        for _ in range(30):
+            if status_code(http_get_via_proxy(listen_port, "alice:s3cret")) == 200:
+                served = True
+                break
+            time.sleep(0.1)
+        check("daemon healthy after abrupt-RST during relay",
+              alive and proc.poll() is None and served, f"exit={proc.poll()}")
 
         print("== RESOURCE HYGIENE (fd / RSS stability) ==")
         time.sleep(0.3)
@@ -383,13 +401,41 @@ def main():
         rss1 = proc_rss_kb(proc.pid)
         check(f"fd count stable after {n_req + n_churn} connections",
               fd1 >= 0 and fd1 <= fd0 + 5, f"fd {fd0} -> {fd1}")
-        if not relax:
-            check("RSS stable after churn (<1.5x and <20MB growth)",
+        # The fd check above is the reliable per-connection leak signal.
+        # RSS: a sanitizer build (ASan quarantine/redzones) never returns memory
+        # to the OS, so only enforce the tight ratio on a release build; under a
+        # sanitizer just guard against a gross runaway (and Valgrind's "all heap
+        # freed" is the definitive leak proof anyway).
+        sanitized = os.environ.get("PROXY_SANITIZED") == "1"
+        if relax:
+            pass
+        elif sanitized:
+            check("RSS no gross runaway under sanitizer (<60MB growth)",
+                  rss1 >= 0 and rss1 <= rss0 + 60000, f"rss {rss0}KB -> {rss1}KB")
+        else:
+            check("RSS stable after churn (release: <1.5x and <20MB growth)",
                   rss1 >= 0 and rss1 <= rss0 + 20000 and rss1 <= int(rss0 * 1.5) + 4000,
                   f"rss {rss0}KB -> {rss1}KB")
 
         check("proxy process still running", proc.poll() is None,
               f"exit={proc.poll()}")
+
+        # NOTE: this must be the LAST check that uses auth. The throttle blocks
+        # the *source IP* after enough failures, and all test traffic shares
+        # 127.0.0.1, so once tripped every subsequent request (even valid) is
+        # rejected for the block window. Run it last so it cannot poison others.
+        print("== BRUTE-FORCE THROTTLE (positive test) ==")
+        # Baseline: valid creds work right now.
+        check("valid creds accepted before throttle",
+              status_code(http_get_via_proxy(listen_port, "alice:s3cret")) == 200)
+        # Burst of failures from this IP trips the throttle.
+        for _ in range(15):
+            http_get_via_proxy(listen_port, "alice:wrong")
+        # Now even VALID creds from this IP are blocked (throttle is active),
+        # and the daemon is still healthy.
+        blocked = status_code(http_get_via_proxy(listen_port, "alice:s3cret"))
+        check("source IP throttled after failed-auth burst",
+              blocked == 407 and proc.poll() is None, f"code={blocked}")
 
     finally:
         proc.send_signal(subprocess.signal.SIGTERM)

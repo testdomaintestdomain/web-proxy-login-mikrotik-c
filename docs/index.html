@@ -559,16 +559,32 @@
         updateAll();
     }
 
+    // Network fields reach both RouterOS strings and bash curl lines, so we
+    // constrain them to safe character sets at the source (defense in depth
+    // against RouterOS/shell string-injection via a crafted field).
+    function sanitizeName(s, fallback) {
+        const v = (s || "").trim().replace(/[^A-Za-z0-9._-]/g, "");
+        return v || fallback;
+    }
+    function sanitizeIpCidr(s, fallback) {
+        const v = (s || "").trim().replace(/[^0-9A-Fa-f.:/]/g, "");
+        return v || fallback;
+    }
+    function sanitizeDigits(s, fallback) {
+        const v = (s || "").trim().replace(/[^0-9]/g, "");
+        return v || fallback;
+    }
+
     function getFormValues() {
-        const ipVal = document.getElementById("ipAddress").value.trim() || "172.30.1.2/24";
-        const gwVal = document.getElementById("gateway").value.trim() || "172.30.1.1";
-        const cidr = ipVal.includes("/") ? ipVal.split("/")[1] : "24";
+        const ipVal = sanitizeIpCidr(document.getElementById("ipAddress").value, "172.30.1.2/24");
+        const gwVal = sanitizeIpCidr(document.getElementById("gateway").value, "172.30.1.1");
+        const cidr = sanitizeDigits(ipVal.includes("/") ? ipVal.split("/")[1] : "24", "24");
         const ipBare = ipVal.split("/")[0];
         const subnet = gwVal.substring(0, gwVal.lastIndexOf(".")) + ".0/" + cidr;
 
         return {
-            veth: document.getElementById("vethName").value.trim() || "proxy-login-veth",
-            bridge: document.getElementById("bridgeName").value.trim() || "bridge1",
+            veth: sanitizeName(document.getElementById("vethName").value, "proxy-login-veth"),
+            bridge: sanitizeName(document.getElementById("bridgeName").value, "bridge1"),
             ip: ipVal,
             ipBare: ipBare,
             gw: gwVal,
@@ -825,7 +841,7 @@
   :local pUser "${escapeRos(c.user)}"
   :local pPass "${escapeRos(c.pass)}"
   :local pUsers "${escapeRos(c.extraUsers.map(u => u.user + ":" + u.pass).join(","))}"
-  :local pHost "${c.gw}"
+  :local pHost "${escapeRos(c.gw)}"
   :local pUport "${c.upstreamPort}"
   :local pLport "${c.listenPort}"
 
@@ -833,18 +849,18 @@
   :do { /container/envs/remove [find where name=$envGroup or list=$envGroup] } on-error={}
   :do { /container/envs/remove [find where key="PROXY_USER" or key="PROXY_PASS" or key="PROXY_USERS" or key="UPSTREAM_HOST" or key="UPSTREAM_PORT" or key="LISTEN_PORT"] } on-error={}
 
-  # 2. Добавление чистых переменных через динамический parse
+  # 2. Добавление переменных. Значения передаются как переменные RouterOS
+  #    напрямую (value=$v), без повторного [:parse], поэтому спецсимволы в
+  #    логине/пароле не могут вырваться из строки и выполниться как команды.
   :local setEnv do={
     :local g $1; :local k $2; :local v $3;
     :local ok false
     :do {
-      [:parse ("/container/envs/add name=\\\"" . $g . "\\\" key=\\\"" . $k . "\\\" value=\\\"" . $v . "\\\"")]
+      /container/envs/add name=$g key=$k value=$v
       :set ok true
     } on-error={}
     :if (!$ok) do={
-      :do {
-        [:parse ("/container/envs/add list=\\\"" . $g . "\\\" key=\\\"" . $k . "\\\" value=\\\"" . $v . "\\\"")]
-      } on-error={}
+      :do { /container/envs/add list=$g key=$k value=$v } on-error={}
     }
   }
 

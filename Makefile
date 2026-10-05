@@ -32,7 +32,7 @@ FUZZ_TIME   ?= 30
 SIZE_BUDGET ?= 131072
 
 .PHONY: all build dev tsan unit integration integration-tsan valgrind fuzz \
-        lint size ci clean
+        lint size leakcheck ci clean
 
 all: build
 
@@ -52,11 +52,16 @@ unit: $(OUT)
 	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 $(OUT)/unit_test
 
 integration: dev
-	python3 tests/integration_test.py $(OUT)/proxy-login-dev
+	PROXY_SANITIZED=1 python3 tests/integration_test.py $(OUT)/proxy-login-dev
 
 integration-tsan: tsan
-	TSAN_OPTIONS=halt_on_error=1 RELAX_RES=1 \
+	TSAN_OPTIONS=halt_on_error=1 RELAX_RES=1 PROXY_SANITIZED=1 \
 		python3 tests/integration_test.py $(OUT)/proxy-login-tsan
+
+# Release-build end-to-end: no sanitizer, so memory returns to the OS and the
+# strict RSS-stability assertion becomes a real per-connection leak check.
+leakcheck: build
+	python3 tests/integration_test.py $(OUT)/proxy-login
 
 valgrind: $(OUT)
 	$(CC) $(WARN) $(DBG) $(SRC) -o $(OUT)/proxy-login-plain
@@ -84,7 +89,7 @@ size: build
 		echo "SIZE BUDGET EXCEEDED"; exit 1; \
 	fi
 
-ci: lint unit integration integration-tsan valgrind fuzz size
+ci: lint unit integration integration-tsan valgrind fuzz leakcheck size
 	@echo "=============================="
 	@echo " ALL CI CHECKS PASSED"
 	@echo "=============================="

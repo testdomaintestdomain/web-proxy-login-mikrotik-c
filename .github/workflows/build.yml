@@ -34,8 +34,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             musl-tools musl-dev gcc clang cppcheck shellcheck valgrind \
             libclang-rt-18-dev python3
-      - name: Lint, unit, integration, tsan, valgrind, fuzz, size
-        run: make lint unit integration integration-tsan valgrind fuzz size
+      - name: Lint, unit, integration, tsan, valgrind, fuzz, leakcheck, size
+        run: make lint unit integration integration-tsan valgrind fuzz leakcheck size
 
   # ============================================================
   # ЭТАП 1: Публикация контейнеров в GitHub Container Registry (ghcr.io)

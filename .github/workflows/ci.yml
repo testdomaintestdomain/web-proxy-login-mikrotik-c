@@ -46,6 +46,9 @@ jobs:
       - name: Fuzz parsers (short)
         run: make fuzz FUZZ_TIME=60
 
+      - name: Release-build leak check (strict RSS)
+        run: make leakcheck
+
       - name: Release build + size budget
         run: make size
 

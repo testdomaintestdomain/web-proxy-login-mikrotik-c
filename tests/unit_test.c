@@ -161,6 +161,49 @@ static void test_check_auth(void) {
     g_users = NULL;
 }
 
+/* ---- deferred free (use-after-free guard in the epoll dispatch) ---- */
+/* conn_close must NOT free the connection inline: a single epoll_wait batch can
+ * carry events for both of its fds, so freeing on the first would dangle the
+ * second. It must retire (null the back-pointers, mark dead, queue) and let
+ * conn_reap() free later. If this is ever reverted to an inline free, reading
+ * c->dead below becomes a use-after-free that ASan catches. */
+static void test_deferred_free(void) {
+    conn_list_t live = {0};
+    conn_list_t zombies = {0};
+    t_live = &live;
+    t_zombies = &zombies;
+
+    connection_t *c = calloc(1, sizeof(*c));
+    CHECK(c != NULL, "alloc conn");
+    if (!c) return;
+    c->client_fd = -1;                 /* no real fds -> conn_close won't close */
+    c->upstream_fd = -1;
+    c->client_ref.conn = c;   c->client_ref.is_client = 1;
+    c->upstream_ref.conn = c; c->upstream_ref.is_client = 0;
+    cl_add(&live, c);
+    atomic_store(&g_conn_count, 1);
+
+    conn_close(-1, c);                 /* epfd unused since both fds are -1     */
+
+    CHECK(c->dead == 1, "conn marked dead (not freed inline)");
+    CHECK(c->client_ref.conn == NULL, "client back-ptr nulled");
+    CHECK(c->upstream_ref.conn == NULL, "upstream back-ptr nulled");
+    CHECK(live.count == 0, "removed from live registry");
+    CHECK(zombies.count == 1, "queued for deferred reap");
+    CHECK(atomic_load(&g_conn_count) == 0, "conn count decremented");
+
+    conn_close(-1, c);                 /* idempotent: dead guard prevents double */
+    CHECK(zombies.count == 1, "double close is a no-op");
+
+    conn_reap();                       /* frees c (ASan/valgrind verify) */
+    CHECK(zombies.count == 0, "reap drains the zombie list");
+
+    free(live.items);
+    free(zombies.items);
+    t_live = NULL;
+    t_zombies = NULL;
+}
+
 int main(void) {
     printf("== proxy_login unit tests ==\n");
     test_base64();
@@ -169,6 +212,7 @@ int main(void) {
     test_user_list();
     test_strip_header();
     test_check_auth();
+    test_deferred_free();
     printf("checks: %d, failures: %d\n", g_checks, g_failures);
     if (g_failures == 0) { printf("ALL UNIT TESTS PASSED\n"); return 0; }
     printf("UNIT TESTS FAILED\n");
