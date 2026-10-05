@@ -8,8 +8,8 @@ C_RESET='\033[0m'
 echo "=== ПРОВЕРКА СОВМЕСТИМОСТИ АРХИВОВ С MIKROTIK ROUTEROS ==="
 
 for arch in amd64 arm64 arm armv5; do
-    DOCKER_PKG="builds/proxy-${arch}-7.20-Docker.tar.gz"
-    OCI_PKG="builds/proxy-${arch}.tar.gz"
+    DOCKER_PKG="builds/proxy-login-${arch}-7.20-Docker.tar.gz"
+    OCI_PKG="builds/proxy-login-${arch}.tar.gz"
     
     echo -n "1. Проверка Classic Docker [${arch}]: "
     TMP_DIR=$(mktemp -d)

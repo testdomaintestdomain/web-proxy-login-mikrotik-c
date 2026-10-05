@@ -1,0 +1,4 @@
+# Keep the build context minimal: only src/ and the Dockerfile are needed.
+*
+!src
+!src/proxy_login.c

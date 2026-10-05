@@ -170,7 +170,7 @@ for i in {1..40}; do
     (
         exec 3<>/dev/tcp/${PROXY_HOST}/${PROXY_PORT} 2>/dev/null || exit 0
         echo -en "GET http://example.com HTTP/1.1\r\nHost: example.com\r\nX-Slow: " >&3
-        for b in {1..10}; do
+        for _ in {1..10}; do
             echo -en "z" >&3
             sleep 0.1
         done

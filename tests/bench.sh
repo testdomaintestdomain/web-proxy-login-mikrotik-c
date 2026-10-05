@@ -5,6 +5,7 @@ PROXY_HOST="${1:-127.0.0.1}"
 PROXY_PORT="${2:-8080}"
 PROXY_USER="${3:-myuser}"
 PROXY_PASS="${4:-mypassword123}"
+# shellcheck disable=SC2034  # informational target, echoed in banners
 TARGET_TOTAL_REQS=10000000 # 10 000 000 соединений
 
 B64_AUTH=$(echo -n "${PROXY_USER}:${PROXY_PASS}" | base64)

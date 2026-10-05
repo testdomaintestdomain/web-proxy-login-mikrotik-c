@@ -420,6 +420,16 @@
                     </div>
                 </div>
 
+                <div class="form-group">
+                    <label for="extraUsers">Дополнительные пользователи (PROXY_USERS) — необязательно</label>
+                    <textarea id="extraUsers" rows="3" autocomplete="off" spellcheck="false"
+                        placeholder="По одному на строку в формате логин:пароль&#10;Например:&#10;ivan:S3cretPass1&#10;olga:An0therPass2"
+                        style="width:100%;resize:vertical;font-family:inherit;"></textarea>
+                    <small style="opacity:.7;display:block;margin-top:4px;">
+                        Каждая строка — отдельная учётная запись. Основной пользователь выше добавляется автоматически.
+                    </small>
+                </div>
+
                 <div class="section-title">Хранилище и среда исполнения</div>
                 <div class="form-group">
                     <label for="storage">Хранилище контейнера</label>
@@ -486,9 +496,26 @@
         wanMode: "auto",
         username: "proxyadmin",
         password: "SuperSecret_2026",
+        extraUsers: "",
         storage: "auto",
         scheduleUpdate: "yes"
     };
+
+    // Parse the "extra users" textarea into a validated [{user, pass}] list.
+    function parseExtraUsers(raw) {
+        if (!raw) return [];
+        const out = [];
+        raw.split(/[\r\n]+/).forEach(line => {
+            const t = line.trim();
+            if (!t || t.startsWith("#")) return;
+            const idx = t.indexOf(":");
+            if (idx <= 0) return;                 // need a non-empty username
+            const u = t.slice(0, idx).trim();
+            const p = t.slice(idx + 1);           // password kept verbatim
+            if (u) out.push({ user: u, pass: p });
+        });
+        return out;
+    }
 
     function escapeRos(str) {
         if (!str) return "";
@@ -552,6 +579,7 @@
             wanMode: document.getElementById("wanMode").value,
             user: document.getElementById("username").value.trim() || "admin",
             pass: document.getElementById("password").value.trim() || "password",
+            extraUsers: parseExtraUsers(document.getElementById("extraUsers").value),
             storage: document.getElementById("storage").value,
             scheduleUpdate: document.getElementById("scheduleUpdate").value === "yes"
         };
@@ -624,7 +652,7 @@
 
   # 2. Очистка переменных окружения
   :do { /container/envs/remove [find where name="proxy_envs" or list="proxy_envs" or name="web_proxy" or list="web_proxy"] } on-error={}
-  :do { /container/envs/remove [find where key="PROXY_USER" or key="PROXY_PASS" or key="UPSTREAM_HOST" or key="UPSTREAM_PORT" or key="LISTEN_PORT"] } on-error={}
+  :do { /container/envs/remove [find where key="PROXY_USER" or key="PROXY_PASS" or key="PROXY_USERS" or key="UPSTREAM_HOST" or key="UPSTREAM_PORT" or key="LISTEN_PORT"] } on-error={}
 
   # 3. Очистка Firewall (NAT и Filter)
   /ip/firewall/nat/remove [find where comment~$tag]
@@ -796,13 +824,14 @@
   :local envGroup "${envList}"
   :local pUser "${escapeRos(c.user)}"
   :local pPass "${escapeRos(c.pass)}"
+  :local pUsers "${escapeRos(c.extraUsers.map(u => u.user + ":" + u.pass).join(","))}"
   :local pHost "${c.gw}"
   :local pUport "${c.upstreamPort}"
   :local pLport "${c.listenPort}"
 
   # 1. Очистка старых переменных перед записью
   :do { /container/envs/remove [find where name=$envGroup or list=$envGroup] } on-error={}
-  :do { /container/envs/remove [find where key="PROXY_USER" or key="PROXY_PASS" or key="UPSTREAM_HOST" or key="UPSTREAM_PORT" or key="LISTEN_PORT"] } on-error={}
+  :do { /container/envs/remove [find where key="PROXY_USER" or key="PROXY_PASS" or key="PROXY_USERS" or key="UPSTREAM_HOST" or key="UPSTREAM_PORT" or key="LISTEN_PORT"] } on-error={}
 
   # 2. Добавление чистых переменных через динамический parse
   :local setEnv do={
@@ -821,6 +850,7 @@
 
   $setEnv $envGroup "PROXY_USER" $pUser
   $setEnv $envGroup "PROXY_PASS" $pPass
+  :if ([:len $pUsers] > 0) do={ $setEnv $envGroup "PROXY_USERS" $pUsers }
   $setEnv $envGroup "UPSTREAM_HOST" $pHost
   $setEnv $envGroup "UPSTREAM_PORT" $pUport
   $setEnv $envGroup "LISTEN_PORT" $pLport
@@ -1115,7 +1145,7 @@ curl -i --connect-timeout 3 -x http://${c.gw}:${c.upstreamPort} http://example.c
 
 # 2. Прямая и безопасная очистка переменных окружения
 :do { /container/envs/remove [find where name="proxy_envs" or list="proxy_envs" or name="web_proxy" or list="web_proxy"] } on-error={}
-:do { /container/envs/remove [find where key="PROXY_USER" or key="PROXY_PASS" or key="UPSTREAM_HOST" or key="UPSTREAM_PORT" or key="LISTEN_PORT"] } on-error={}
+:do { /container/envs/remove [find where key="PROXY_USER" or key="PROXY_PASS" or key="PROXY_USERS" or key="UPSTREAM_HOST" or key="UPSTREAM_PORT" or key="LISTEN_PORT"] } on-error={}
 
 # 3. Очистка правил Firewall (NAT и Filter)
 /ip/firewall/nat/remove [find where comment~$tag]
