@@ -2,7 +2,7 @@
 
 [![C11](https://img.shields.io/badge/C-11-blue.svg)](https://en.cppreference.com/w/c/11)
 [![musl](https://img.shields.io/badge/libc-musl-green.svg)](https://musl.libc.org/)
-[![Size](https://img.shields.io/badge/binary_size-~35_KB-brightgreen.svg)]()
+[![Size](https://img.shields.io/badge/binary_size-~83_KB-brightgreen.svg)]()
 [![RouterOS](https://img.shields.io/badge/RouterOS-7.4%20--%207.22+-orange.svg)](https://mikrotik.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -54,7 +54,7 @@
       Proxy-Authorization: Basic <base64>
               ▼
 ┌──────────────────────────────────────────────────────────┐
-│ MikroTik Container: proxy-login (~35 КБ RAM)             │
+│ MikroTik Container: proxy-login (~1-2 МБ RAM, epoll)      │
 │ • Проверка учетных данных (407 при ошибке)               │
 │ • Вырезание hop-by-hop заголовка Proxy-Authorization     │
 │ • Защита от переполнения буфера (8KB Header Limit)       │
@@ -78,7 +78,7 @@
 * **MikroTik RouterOS:** версия `7.4` и выше с установленным пакетом `container`.
 * **Архитектура процессора:** `amd64 / x86_64`, `arm64`, `arm (v7)`, `armv5` (поддерживаются все линейки от CHR и CCR до hAP ac и hEX).
 * **Свободное место на диске:** от **1 МБ** (размер контейнера ~50 КБ).
-* **Оперативная память (RAM):** от **2 МБ** свободной памяти (стек потока всего 64 КБ).
+* **Оперативная память (RAM):** от **2 МБ** свободной памяти в простое. Модель на `epoll` (без потока на соединение) — расход растёт только с числом активных туннелей (~16 КБ на активный туннель), ограничен `MAX_CONN`.
 
 ---
 
@@ -215,12 +215,41 @@ curl -i -x http://192.168.88.1:8080 --proxy-user "myuser:mypassword123" https://
 
 | Переменная | Обязательная | По умолчанию | Описание |
 | :--- | :---: | :---: | :--- |
-| `PROXY_USER` | **Да** | — | Имя пользователя для HTTP Basic аутентификации |
-| `PROXY_PASS` | **Да** | — | Пароль пользователя |
-| `UPSTREAM_HOST` | **Да** | — | IP-адрес встроенного Web-Proxy MikroTik (например, `172.17.0.1`) |
+| `PROXY_USER` | **Да\*** | — | Имя основного пользователя для HTTP Basic аутентификации |
+| `PROXY_PASS` | **Да\*** | — | Пароль основного пользователя |
+| `UPSTREAM_HOST` | **Да** | — | IPv4-адрес встроенного Web-Proxy MikroTik (например, `172.17.0.1`) |
 | `UPSTREAM_PORT` | **Да** | — | Порт встроенного Web-Proxy MikroTik (например, `8081`) |
 | `LISTEN_PORT` | Нет | `8080` | Локальный TCP-порт, на котором контейнер слушает входящие подключения |
+| `PROXY_USERS` | Нет | — | Дополнительные учётные записи списком: `user1:pass1,user2:pass2` (разделители `,` `;` или перевод строки). Можно использовать вместо/вместе с `PROXY_USER` |
+| `PROXY_USERS_FILE` | Нет | — | Путь к файлу с учётными записями (`user:pass` по строке, `#` — комментарий). Перечитывается автоматически при изменении файла — пользователей можно добавлять без перезапуска |
+| `MAX_CONN` | Нет | `512` | Максимум одновременных соединений на весь процесс (защита ОЗУ от исчерпания) |
+| `WORKERS` | Нет | *(= число CPU, максимум 8)* | Количество рабочих потоков (`epoll`-циклов). На слабых роутерах оставьте авто (обычно `1`) |
+| `HEADER_TIMEOUT_MS` | Нет | `10000` | Дедлайн на приём полного заголовка запроса (анти-slowloris) |
+| `IDLE_TIMEOUT_MS` | Нет | `120000` | Таймаут простоя для установленного туннеля |
 | `PROXY_VER` | Нет | *(вшитая версия)* | Версия сборки. Если переменная не передана, контейнер работает на внутренней версии бинарника, не вызывая сбоев |
+
+> **\*** Нужен хотя бы один источник учётных данных: либо пара `PROXY_USER`+`PROXY_PASS`, либо `PROXY_USERS`, либо `PROXY_USERS_FILE`. Без единой учётной записи контейнер намеренно не стартует.
+
+### 👥 Много пользователей
+
+Для нескольких учётных записей задайте список в одной переменной:
+
+```routeros
+/container/envs/add list=proxy_envs key=PROXY_USERS value="ivan:S3cretPass1,olga:An0therPass2,admin:MasterKey3"
+```
+
+Либо смонтируйте файл и укажите путь к нему (удобно для сотен пользователей и для добавления «на лету» — файл перечитывается при изменении):
+
+```routeros
+/container/envs/add list=proxy_envs key=PROXY_USERS_FILE value="/etc/proxy_users"
+```
+```text
+# /etc/proxy_users — по одной записи на строку
+ivan:S3cretPass1
+olga:An0therPass2
+```
+
+Проверка каждого логина выполняется в постоянном времени по всей таблице, поэтому время ответа не зависит от того, какой пользователь ошибся — утечки через тайминг нет. Веб-конфигуратор умеет генерировать `PROXY_USERS` автоматически (поле «Дополнительные пользователи»).
 
 ---
 
@@ -276,6 +305,30 @@ RouterOS скачает свежие слои и перезапустит кон
 
 ## 🔨 Сборка из исходников
 
+### Локальная сборка и проверки (харнесс)
+
+Весь цикл проверок завязан на `Makefile`. Нужны `musl-tools`, `gcc`/`clang`,
+`cppcheck`, `shellcheck`, `valgrind`, `python3`:
+
+```bash
+make            # релизный статический бинарник musl -> builds/proxy-login
+make unit       # модульные тесты парсеров (ASan+UBSan)
+make integration       # сквозные тесты (ASan+UBSan, mock-upstream)
+make integration-tsan  # сквозные тесты под ThreadSanitizer
+make valgrind          # сквозные тесты под Valgrind (0 ошибок/утечек)
+make fuzz FUZZ_TIME=30 # фаззинг парсеров через libFuzzer
+make lint       # cppcheck + shellcheck
+make size       # контроль бюджета ПЗУ (128 КБ)
+make ci         # полный гейт: всё перечисленное сразу
+```
+
+> В облачных сессиях Claude Code весь инструментарий ставится автоматически
+> хуком `.claude/hooks/session-start.sh`. CI (`.github/workflows/ci.yml`)
+> прогоняет `make ci` на каждый push/PR, а релиз публикуется только после
+> прохождения этого гейта.
+
+### Мульти-арх артефакты (релиз)
+
 Для сборки всех 12 артефактов (бинарники, OCI, Classic Docker под все 4 архитектуры) требуются `Docker` и `buildx`:
 
 ```bash
@@ -287,9 +340,8 @@ cd web-proxy-login-mikrotik-c
 chmod +x build.sh scripts/mkdockertar-c.sh
 ./build.sh
 
-# Запуск тестов безопасности и совместимости архивов
+# Запуск тестов совместимости архивов
 bash tests/test_archive_compatibility.sh
-bash tests/test_http.sh
 ```
 Скомпилированные файлы появятся в каталоге `builds/`.
 

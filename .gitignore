@@ -1,1 +1,8 @@
-builds/
+/builds/
+*.o
+*.obj
+*.gcda
+*.gcno
+crash-*
+*.log
+.DS_Store

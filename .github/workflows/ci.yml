@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [master, 'claude/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            musl-tools musl-dev gcc clang \
+            cppcheck shellcheck valgrind \
+            libclang-rt-18-dev python3
+
+      - name: Lint (cppcheck + shellcheck)
+        run: make lint
+
+      - name: Unit tests (ASan + UBSan)
+        run: make unit
+
+      - name: Integration tests (ASan + UBSan)
+        run: make integration
+
+      - name: Integration under ThreadSanitizer
+        run: make integration-tsan
+
+      - name: Integration under Valgrind
+        run: make valgrind
+
+      - name: Fuzz parsers (short)
+        run: make fuzz FUZZ_TIME=60
+
+      - name: Release-build leak check (strict RSS)
+        run: make leakcheck
+
+      - name: Release build + size budget
+        run: make size
+
+      - name: Show binary size
+        run: ls -l builds/proxy-login

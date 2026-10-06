@@ -15,7 +15,7 @@ COPY ./src/proxy_login.c .
 # Сборка ультралегкого статического бинарника под musl с внедрением версии
 RUN mkdir -p /out/etc && \
     CC=$(command -v musl-gcc || echo gcc) && \
-    $CC -Os -static -Wall -Wextra -pthread \
+    $CC -std=c11 -Os -static -Wall -Wextra -pthread \
         -DPROXY_VERSION="\"${VERSION}\"" \
         -ffunction-sections -fdata-sections -Wl,--gc-sections -flto \
         proxy_login.c -o /out/proxy_login && \
